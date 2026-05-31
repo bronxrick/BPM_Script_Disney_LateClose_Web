@@ -1,0 +1,18 @@
+# Google OAuth tokens — never commit these
+token.json
+credentials.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
