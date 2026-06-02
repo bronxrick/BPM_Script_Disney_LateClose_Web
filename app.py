@@ -183,6 +183,9 @@ def debug():
         except Exception as e:
             creds_error = str(e)
 
+    # Show all env var KEYS (not values) so we can see what Railway is injecting
+    env_keys = sorted(os.environ.keys())
+
     return jsonify({
         'data_dir': DATA_DIR,
         'token_path': TOKEN_PATH,
@@ -193,6 +196,7 @@ def debug():
         'creds_expired': creds_expired,
         'creds_valid': creds_valid,
         'creds_error': creds_error,
+        'all_env_keys': env_keys,
     })
 
 
