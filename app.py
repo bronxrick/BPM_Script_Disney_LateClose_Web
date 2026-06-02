@@ -37,17 +37,29 @@ CREDENTIALS_PATH = os.path.join(DATA_DIR, 'credentials.json')
 
 # Seed credentials.json from env var on first deploy (Railway secret → file)
 _creds_env = os.environ.get('GOOGLE_CREDENTIALS_JSON')
-if _creds_env and not os.path.exists(CREDENTIALS_PATH):
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(CREDENTIALS_PATH, 'w') as _f:
-        _f.write(_creds_env)
+if _creds_env:
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(CREDENTIALS_PATH, 'w') as _f:
+            _f.write(_creds_env)
+        print('[STARTUP] credentials.json written to', CREDENTIALS_PATH)
+    except Exception as _e:
+        print('[STARTUP] ERROR writing credentials.json:', _e)
+else:
+    print('[STARTUP] GOOGLE_CREDENTIALS_JSON env var not set')
 
-# Seed token.json from env var (Railway secret → file)
+# Seed token.json from env var on every startup (always overwrite so updates take effect)
 _token_env = os.environ.get('GOOGLE_TOKEN_JSON')
-if _token_env and not os.path.exists(TOKEN_PATH):
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(TOKEN_PATH, 'w') as _f:
-        _f.write(_token_env)
+if _token_env:
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(TOKEN_PATH, 'w') as _f:
+            _f.write(_token_env)
+        print('[STARTUP] token.json written to', TOKEN_PATH)
+    except Exception as _e:
+        print('[STARTUP] ERROR writing token.json:', _e)
+else:
+    print('[STARTUP] GOOGLE_TOKEN_JSON env var not set')
 
 # Only allow HTTP OAuth in local/dev mode. Railway serves HTTPS so this stays off.
 if not os.environ.get('PRODUCTION'):
@@ -151,6 +163,37 @@ def auth_callback():
 def auth_status():
     service = get_calendar_service()
     return jsonify({'authenticated': service is not None})
+
+
+@app.route('/api/debug')
+def debug():
+    token_exists = os.path.exists(TOKEN_PATH)
+    creds_exists = os.path.exists(CREDENTIALS_PATH)
+    token_env_set = bool(os.environ.get('GOOGLE_TOKEN_JSON'))
+    creds_env_set = bool(os.environ.get('GOOGLE_CREDENTIALS_JSON'))
+
+    creds_error = None
+    creds_expired = None
+    creds_valid = None
+    if token_exists:
+        try:
+            creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
+            creds_expired = creds.expired
+            creds_valid = creds.valid
+        except Exception as e:
+            creds_error = str(e)
+
+    return jsonify({
+        'data_dir': DATA_DIR,
+        'token_path': TOKEN_PATH,
+        'token_file_exists': token_exists,
+        'token_env_set': token_env_set,
+        'credentials_file_exists': creds_exists,
+        'credentials_env_set': creds_env_set,
+        'creds_expired': creds_expired,
+        'creds_valid': creds_valid,
+        'creds_error': creds_error,
+    })
 
 
 @app.route('/api/scrape', methods=['POST'])
