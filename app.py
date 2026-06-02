@@ -81,8 +81,9 @@ def load_credentials():
             creds.refresh(Request())
             with open(TOKEN_PATH, 'w') as f:
                 f.write(creds.to_json())
-        except RefreshError:
-            os.remove(TOKEN_PATH)
+            print('[AUTH] Token refreshed successfully')
+        except Exception as e:
+            print('[AUTH] Token refresh failed:', str(e))
             return None
 
     return creds if creds.valid else None
@@ -175,11 +176,20 @@ def debug():
     creds_error = None
     creds_expired = None
     creds_valid = None
+    refresh_error = None
+    refresh_success = None
     if token_exists:
         try:
             creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
             creds_expired = creds.expired
             creds_valid = creds.valid
+            if creds.expired and creds.refresh_token:
+                try:
+                    creds.refresh(Request())
+                    refresh_success = True
+                    creds_valid = creds.valid
+                except Exception as e:
+                    refresh_error = str(e)
         except Exception as e:
             creds_error = str(e)
 
@@ -196,6 +206,9 @@ def debug():
         'creds_expired': creds_expired,
         'creds_valid': creds_valid,
         'creds_error': creds_error,
+        'refresh_attempted': creds_expired is True,
+        'refresh_success': refresh_success,
+        'refresh_error': refresh_error,
         'all_env_keys': env_keys,
     })
 
