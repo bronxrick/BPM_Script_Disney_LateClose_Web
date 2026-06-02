@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Disney Late Close Calendar Extractor</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #050816;
+      color: #E0F7FA;
+      font-family: 'Consolas', 'Courier New', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      background: #0a1030;
+      border-bottom: 2px solid #00E5FF;
+      padding: 16px 24px;
+      text-align: center;
+    }
+    .header h1 {
+      font-size: 1.3rem;
+      color: #00E5FF;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+    .header .subtitle {
+      font-size: 0.72rem;
+      color: #FFA726;
+      margin-top: 4px;
+      letter-spacing: 1px;
+    }
+
+    .auth-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 10px 24px;
+      background: #060b20;
+      border-bottom: 1px solid #1a2a4a;
+      flex-wrap: wrap;
+    }
+    .auth-status {
+      font-size: 0.78rem;
+      padding: 4px 12px;
+      border-radius: 4px;
+    }
+    .auth-status.connected    { color: #4CAF50; border: 1px solid #4CAF50; }
+    .auth-status.disconnected { color: #FF5722; border: 1px solid #FF5722; }
+
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      padding: 12px 24px;
+      border-bottom: 1px solid #1a2a4a;
+    }
+
+    .btn {
+      padding: 8px 20px;
+      border: none;
+      border-radius: 6px;
+      font-family: 'Consolas', monospace;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      letter-spacing: 1px;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .btn:hover:not(:disabled) { opacity: 0.82; transform: translateY(-1px); }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .btn-primary { background: #00E5FF; color: #050816; font-weight: bold; }
+    .btn-auth    { background: #1a73e8; color: white; }
+    .btn-create  { background: #4CAF50; color: white; font-weight: bold; width: 100%; padding: 11px; font-size: 0.88rem; }
+    .btn-cancel  { background: #333; color: #aaa; width: 100%; padding: 9px; font-size: 0.82rem; }
+
+    .main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    /* Log panel */
+    .log-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 14px 16px;
+      min-width: 0;
+    }
+    .panel-label {
+      font-size: 0.65rem;
+      color: #FFA726;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .log-output {
+      flex: 1;
+      background: #020610;
+      border: 2px solid #00E5FF2a;
+      border-radius: 8px;
+      padding: 10px 14px;
+      overflow-y: auto;
+      font-size: 0.78rem;
+      line-height: 1.65;
+      min-height: 300px;
+      max-height: calc(100vh - 260px);
+    }
+    .log-line { white-space: pre-wrap; word-break: break-word; }
+    .log-info      { color: #b0d8e0; }
+    .log-add       { color: #4CAF50; }
+    .log-skip      { color: #FFA726; }
+    .log-warn      { color: #FF9800; }
+    .log-error     { color: #F44336; }
+    .log-separator { color: #00E5FF33; }
+
+    /* Event panel */
+    .event-panel {
+      width: 400px;
+      min-width: 300px;
+      border-left: 2px solid #00E5FF18;
+      display: flex;
+      flex-direction: column;
+      padding: 14px 16px;
+      gap: 8px;
+    }
+    .event-panel.hidden { display: none; }
+
+    .event-subtitle {
+      font-size: 0.67rem;
+      color: #b0d8e0;
+      letter-spacing: 0.5px;
+    }
+
+    .event-list {
+      flex: 1;
+      overflow-y: auto;
+      border: 2px solid #00E5FF2a;
+      border-radius: 8px;
+      padding: 6px;
+      background: #020610;
+      min-height: 160px;
+      max-height: calc(100vh - 360px);
+    }
+
+    .event-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      padding: 8px 6px;
+      border-bottom: 1px solid #1a2a4a;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background 0.1s;
+    }
+    .event-item:hover:not(.skip) { background: #0a1428; }
+    .event-item:last-child { border-bottom: none; }
+    .event-item.skip { opacity: 0.45; cursor: default; }
+
+    .event-item input[type="checkbox"] {
+      accent-color: #00E5FF;
+      width: 15px;
+      height: 15px;
+      flex-shrink: 0;
+      margin-top: 3px;
+    }
+
+    .event-text { flex: 1; font-size: 0.76rem; line-height: 1.45; }
+    .event-summary      { color: #4CAF50; font-weight: bold; }
+    .event-summary.skip { color: #FFA726; font-weight: normal; }
+    .event-date         { color: #00E5FF66; font-size: 0.68rem; margin-top: 2px; }
+
+    .event-badge {
+      font-size: 0.6rem;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .badge-add  { background: #4CAF5020; color: #4CAF50; border: 1px solid #4CAF5040; }
+    .badge-skip { background: #FFA72620; color: #FFA726; border: 1px solid #FFA72640; }
+
+    .event-actions { display: flex; flex-direction: column; gap: 6px; }
+
+    .empty-state {
+      text-align: center;
+      padding: 36px 20px;
+      color: #00E5FF30;
+    }
+    .empty-icon { font-size: 1.8rem; margin-bottom: 8px; }
+    .empty-state p { font-size: 0.76rem; }
+
+    .spinner {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid #00E5FF44;
+      border-top-color: #00E5FF;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 680px) {
+      .main { flex-direction: column; }
+      .event-panel {
+        width: 100%;
+        border-left: none;
+        border-top: 2px solid #00E5FF18;
+      }
+      .log-output  { max-height: 280px; }
+      .event-list  { max-height: 220px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Disney Late Close Calendar Extractor</h1>
+  <div class="subtitle">Flux Capacitor Online &mdash; Time Circuits Engaged &mdash; Live Log Stream</div>
+</div>
+
+<div class="auth-bar">
+  <span id="authStatus" class="auth-status disconnected">&#9679; Checking...</span>
+  <a id="authBtn" href="/auth/google" class="btn btn-auth" style="display:none">Connect Google Calendar</a>
+</div>
+
+<div class="controls">
+  <button id="scanBtn" class="btn btn-primary" disabled>&#9654; Run Scan</button>
+</div>
+
+<div class="main">
+  <div class="log-panel">
+    <div class="panel-label">&#9632; Console Log</div>
+    <div class="log-output" id="logOutput">
+      <div class="log-line log-info">[FLUX] Console initialized. Awaiting your command.</div>
+    </div>
+  </div>
+
+  <div class="event-panel hidden" id="eventPanel">
+    <div class="panel-label">&#9632; Events to Create</div>
+    <div class="event-subtitle">Check the events you want to push to Google Calendar</div>
+    <div class="event-list" id="eventList">
+      <div class="empty-state">
+        <div class="empty-icon">&#128197;</div>
+        <p>Run a scan to see events</p>
+      </div>
+    </div>
+    <div class="event-actions">
+      <button id="createBtn" class="btn btn-create" disabled>&#10003; Create Selected Events</button>
+      <button id="cancelBtn" class="btn btn-cancel">&#215; Clear</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let scannedEvents = [];
+
+  const authStatus = document.getElementById('authStatus');
+  const authBtn    = document.getElementById('authBtn');
+  const scanBtn    = document.getElementById('scanBtn');
+  const logOutput  = document.getElementById('logOutput');
+  const eventPanel = document.getElementById('eventPanel');
+  const eventList  = document.getElementById('eventList');
+  const createBtn  = document.getElementById('createBtn');
+  const cancelBtn  = document.getElementById('cancelBtn');
+
+  // ---- Logging ----
+  function logLine(text) {
+    const div = document.createElement('div');
+    div.className = 'log-line ' + lineClass(text);
+    div.textContent = text;
+    logOutput.appendChild(div);
+    logOutput.scrollTop = logOutput.scrollHeight;
+  }
+
+  function lineClass(t) {
+    if (t.startsWith('[ADD]'))    return 'log-add';
+    if (t.startsWith('[SKIP]'))   return 'log-skip';
+    if (t.startsWith('[WARN]'))   return 'log-warn';
+    if (t.startsWith('[ERROR]'))  return 'log-error';
+    if (t.startsWith('=====') || t === '================================') return 'log-separator';
+    return 'log-info';
+  }
+
+  // ---- Auth ----
+  async function checkAuth() {
+    try {
+      const res  = await fetch('/api/auth-status');
+      const data = await res.json();
+      if (data.authenticated) {
+        authStatus.className   = 'auth-status connected';
+        authStatus.textContent = '&#9679; Connected to Google Calendar';
+        authBtn.style.display  = 'none';
+        scanBtn.disabled       = false;
+      } else {
+        authStatus.className   = 'auth-status disconnected';
+        authStatus.textContent = '&#9679; Not Connected to Google Calendar';
+        authBtn.style.display  = 'inline-block';
+        scanBtn.disabled       = true;
+      }
+    } catch (e) {
+      authStatus.textContent = '&#9679; Error checking auth';
+    }
+  }
+
+  // ---- Scan ----
+  scanBtn.addEventListener('click', async () => {
+    logOutput.innerHTML = '';
+    scannedEvents       = [];
+    eventList.innerHTML = '<div class="empty-state"><div class="empty-icon">&#9203;</div><p>Scanning Disney World...</p></div>';
+    eventPanel.classList.remove('hidden');
+    createBtn.disabled  = true;
+    scanBtn.disabled    = true;
+    scanBtn.innerHTML   = '<span class="spinner"></span>Scanning...';
+
+    logLine('[INFO] Initiating scan...');
+
+    try {
+      const res  = await fetch('/api/scrape', { method: 'POST' });
+      const data = await res.json();
+
+      (data.logs || []).forEach(logLine);
+
+      if (!res.ok) {
+        logLine('[ERROR] ' + (data.error || 'Unknown server error'));
+      } else {
+        scannedEvents = data.events || [];
+        renderEvents(scannedEvents);
+        updateCreateBtn();
+      }
+    } catch (e) {
+      logLine('[ERROR] Request failed: ' + e.message);
+    }
+
+    scanBtn.disabled  = false;
+    scanBtn.innerHTML = '&#9654; Run Scan';
+  });
+
+  // ---- Render events ----
+  function renderEvents(events) {
+    if (!events.length) {
+      eventList.innerHTML = '<div class="empty-state"><div class="empty-icon">&#127774;</div><p>No late-close events found</p></div>';
+      return;
+    }
+
+    eventList.innerHTML = '';
+
+    events.forEach((ev, i) => {
+      const isAdd = ev.action === 'add';
+
+      const item = document.createElement('div');
+      item.className = 'event-item' + (isAdd ? '' : ' skip');
+
+      const cb       = document.createElement('input');
+      cb.type        = 'checkbox';
+      cb.checked     = isAdd;
+      cb.disabled    = !isAdd;
+      cb.dataset.idx = i;
+      cb.addEventListener('change', updateCreateBtn);
+
+      const textDiv = document.createElement('div');
+      textDiv.className = 'event-text';
+
+      const summaryDiv = document.createElement('div');
+      summaryDiv.className = 'event-summary' + (isAdd ? '' : ' skip');
+      summaryDiv.textContent = ev.summary;
+
+      const dateDiv = document.createElement('div');
+      dateDiv.className = 'event-date';
+      dateDiv.textContent = ev.date;
+
+      const badge = document.createElement('span');
+      badge.className = 'event-badge ' + (isAdd ? 'badge-add' : 'badge-skip');
+      badge.textContent = isAdd ? 'ADD' : 'SKIP';
+
+      textDiv.appendChild(summaryDiv);
+      textDiv.appendChild(dateDiv);
+      item.appendChild(cb);
+      item.appendChild(textDiv);
+      item.appendChild(badge);
+      eventList.appendChild(item);
+
+      if (isAdd) {
+        item.addEventListener('click', (e) => {
+          if (e.target !== cb) { cb.checked = !cb.checked; updateCreateBtn(); }
+        });
+      }
+    });
+  }
+
+  function updateCreateBtn() {
+    const any = [...eventList.querySelectorAll('input[type=checkbox]:not(:disabled):checked')].length > 0;
+    createBtn.disabled = !any;
+  }
+
+  // ---- Create events ----
+  createBtn.addEventListener('click', async () => {
+    const selected = [];
+    eventList.querySelectorAll('input[type=checkbox]').forEach((cb, i) => {
+      if (cb.checked && scannedEvents[i]) selected.push(scannedEvents[i]);
+    });
+
+    if (!selected.length) return;
+
+    createBtn.disabled  = true;
+    createBtn.innerHTML = '<span class="spinner"></span>Creating...';
+    logLine('');
+    logLine('[INFO] Sending ' + selected.length + ' event(s) to Google Calendar...');
+
+    try {
+      const res  = await fetch('/api/create-events', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ events: selected }),
+      });
+      const data = await res.json();
+
+      (data.logs || []).forEach(logLine);
+
+      createBtn.innerHTML = res.ok ? '&#10003; Done!' : '&#10003; Create Selected Events';
+      if (res.ok) {
+        setTimeout(() => {
+          createBtn.innerHTML = '&#10003; Create Selected Events';
+          createBtn.disabled  = false;
+        }, 3000);
+      } else {
+        createBtn.disabled = false;
+      }
+    } catch (e) {
+      logLine('[ERROR] ' + e.message);
+      createBtn.innerHTML = '&#10003; Create Selected Events';
+      createBtn.disabled  = false;
+    }
+  });
+
+  // ---- Clear ----
+  cancelBtn.addEventListener('click', () => {
+    scannedEvents       = [];
+    eventList.innerHTML = '<div class="empty-state"><div class="empty-icon">&#128197;</div><p>Run a scan to see events</p></div>';
+    createBtn.disabled  = true;
+    eventPanel.classList.add('hidden');
+  });
+
+  checkAuth();
+</script>
+</body>
+</html>
